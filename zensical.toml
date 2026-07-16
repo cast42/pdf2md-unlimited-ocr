@@ -1,6 +1,6 @@
 [project]
-site_name = "python-minimal-boilerplate"
-site_description = "Modern minimal boilerplate for a Python project"
+site_name = "pdf2md-unlimited-ocr"
+site_description = "Convert PDF files to Markdown locally with PDFium and Unlimited OCR"
 site_author = "Your Name"
 copyright = "Copyright &copy; 2026 The authors"
 

@@ -35,10 +35,11 @@ All recipes inherit `.env` values because the `justfile` uses `set dotenv-load`.
 - Prefer built-in collection types (`list`, `dict`, `set`, etc.) over legacy `typing` aliases.
 - Treat Ruff, Ty, and pytest warnings as failures; resolve them before finalizing work.
 
-## Observability Notes
+## Runtime Notes
 
-- Logging uses Pydantic [Logfire](https://pydantic.dev/logfire). Configure credentials by copying `.env.example` to `.env` and setting `LOGFIRE_TOKEN`.
-- Telemetry export to Azure remains unresolved; mention this limitation when proposing observability changes.
+- The application runs Baidu Unlimited OCR locally through MLX-VLM.
+- Full integration tests need an Apple Silicon Mac with Metal access and a locally cached model, or network access for the first model download.
+- PDF rendering must use `pypdfium2`. Do not add PyMuPDF or import `fitz`.
 
 ## When Collaborating
 

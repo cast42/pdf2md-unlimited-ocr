@@ -1,15 +1,17 @@
 [project]
-name = "python-minimal-boilerplate"
+name = "pdf2md-unlimited-ocr"
 version = "0.1.0"
-description = "Add your description here"
+description = "Convert PDF files to Markdown locally with PDFium and Unlimited OCR"
 readme = "README.md"
 requires-python = ">=3.14"
 dependencies = [
-    "logfire>=4.16.0",
+    "mlx-vlm>=0.6.4",
+    "pillow>=12.3.0",
+    "pypdfium2>=5.12.0",
 ]
 
 [project.scripts]
-python-minimal-boilerplate = "python_minimal_boilerplate.cli:main"
+pdf2md-unlimited-ocr = "pdf2md_unlimited_ocr.cli:main"
 
 [dependency-groups]
 dev = [
@@ -19,6 +21,7 @@ dev = [
     "zensical>=0.0.19",
     "pytest>=9.0.2",
     "mkdocstrings-python>=2.0.1",
+    "reportlab>=5.0.0",
 ]
 
 [build-system]
@@ -37,3 +40,8 @@ select = ["D", "E4", "E7", "E9", "F"]
 
 [tool.ruff.lint.pydocstyle]
 convention = "pep257"
+
+[tool.pytest.ini_options]
+markers = [
+    "integration: runs the local Unlimited OCR model through MLX",
+]

@@ -1,171 +1,107 @@
-# python-minimal-boilerplate
+# pdf2md-unlimited-ocr
 
-Modern minimal boilerplate for a Python project with following developer dependencies:
+`pdf2md-unlimited-ocr` converts PDF files to Markdown on an Apple Silicon Mac. It renders pages with PDFium and runs Baidu Unlimited OCR locally through MLX. PDF content is not sent to an OCR service.
 
-- from [Astral](https://astral.sh):
-  - package manager for dependency management: `uv`,
-  - linting: `ruff`,
-  - type checking: `ty`
-- testing: `pytest`, and
-- [documentation](https://github.com/cast42/zensical): `zensical`.
+## Requirements
 
-It uses command runner [`just`](https://github.com/casey/just) as a handy way to save and run project-specific commands.
-Logging is optionally with [Pydantic Logfire](https://pydantic.dev/logfire) as an example, but you can easily switch to your own favorite logger.
+The first version is made for this system:
 
-## Installation
+- An Apple Silicon Mac
+- macOS
+- Python 3.14
+- About 7 GB of free disk space for the model cache
+- Enough free unified memory to load and run the model
 
-### Create a new repository starting from the template
+The project uses `pypdfium2`. It does not use PyMuPDF or `fitz`.
 
-Create a new repository from the template. Open the browser at
-[https://github.com/cast42/python-minimal-boilerplate](https://github.com/cast42/python-minimal-boilerplate)
-and click `Use this template` (Create a new repository). Give your new repository a name. E.g. `new-repo-name-from-template`
+## Install
 
-Next clone your new repository, generated from the template. Do not forget to replace url with url of the new repository:
+Install the project and its development tools with `uv`:
 
 ```sh
-git clone https://github.com/<your github handle>/<new-repo-name-from-template>.git
+just install
 ```
 
-### Install uv if not already installed
+The first conversion downloads `baidu/Unlimited-OCR` from Hugging Face. The download is about 6.7 GB. Later conversions use the normal Hugging Face cache.
 
-- Install `uv` following the upstream instructions: <https://docs.astral.sh/uv/getting-started/installation/>
+## Use
 
-### Install Just for command invocation
-
-If `just` is not yet installed. Install with (on osx)
+Convert one PDF and write `report.md` beside it:
 
 ```sh
-brew install just
+uv run pdf2md-unlimited-ocr report.pdf
 ```
 
-or on Ubuntu Linux:
-
-```
-sudo apt update
-sudo apt install just
-```
-
-or on other platforms:
-
-[Installation instructions for just on other plafforms](<https://github.com/casey/just?tab=readme-ov-file#installation>)
-
-## Initial setup of the project
-
-Change directory into the new cloned directory (Replace new-repo-from-template with the name of your repository):
+Convert several PDFs:
 
 ```sh
-cd new-repo-name-from-template
+uv run pdf2md-unlimited-ocr report.pdf appendix.pdf
 ```
 
-### Optional: Provide logfire token for logging in the eu cloud
-
-If you want to inspect the logging via the logfire project site, you need to provide the logfire token. If no token is provided, no logging is sent to the cloud and only logging is emmited on the command line output.
-
-Get your logfire token (get it here [https://logfire.pydantic.dev/docs/how-to-guides/create-write-tokens/](https://logfire.pydantic.dev/docs/how-to-guides/create-write-tokens/)), copy the .env.example to .env and fill in value for  LOGFIRE_TOKEN.
-The app calls `logfire.configure(send_to_logfire='if-token-present')`, so nothing
-is sent to Logfire unless you provide credentials.
-
-## Test if everthing works
-
-Check the code quality with ruff and ty from Astral by running the command `just check`:
+Print one conversion to standard output:
 
 ```sh
-> just check
-uv run ruff check --fix
-All checks passed!
-uv run ty check
-Checking ------------------------------------------------------------ 2/2
-files
-All checks passed!
+uv run pdf2md-unlimited-ocr --stdout report.pdf
 ```
 
-Test the code by issuing command `just test`:
+Keep the rendered page images:
 
 ```sh
-> just test
-uv run -m pytest -q
-.
-1 passed in 0.01s
+uv run pdf2md-unlimited-ocr --keep-images report.pdf
 ```
 
-Run the python code in `src/main.py`:
+Replace an existing Markdown file:
 
 ```sh
-> just run
+uv run pdf2md-unlimited-ocr --force report.pdf
 ```
 
-Since the justfile starts with `set dotenv-load`, the environment variables defined in the `.env` file are loaded before
-the python program is run. The python program will also run if the LOGFIRE_TOKEN environment variable is not set but no logging on pydantic endpoint will be done.
+Run `uv run pdf2md-unlimited-ocr --help` to see every option.
 
-You should see this output from running `just run` on the commandline:
+## How conversion works
+
+For each PDF, the tool:
+
+1. Creates a temporary directory.
+2. Renders each page as a numbered PNG image with PDFium.
+3. Passes the ordered images to `baidu/Unlimited-OCR` through MLX-VLM.
+4. Removes model control markers from the returned Markdown.
+5. Writes the Markdown and removes the temporary images.
+
+The `--keep-images` option keeps the temporary directory and prints its path to standard error.
+
+## Test
+
+Run the full test suite:
 
 ```sh
-uv run python -m src.main
-15:12:23.707 application.startup
-Hello from python-minimal-boilerplate!
+just test
 ```
 
-### Customize the Copilot instructions
+The full suite includes a local OCR roundtrip. The test creates a one page PDF from a short Markdown string, converts the PDF through PDFium and the real Unlimited OCR model, and compares the generated Markdown with the starting Markdown. The test passes when their normalized text similarity is at least 80 percent.
 
-The template ships with `.vscode/copilot-instructions.md` for GitHub Copilot (or similar AI helpers).
-Treat it as a starting point and adapt the contents to your personal style so Copilot mirrors how you like to code.
-Update things like your preferred line length, indentation width, naming conventions, or any other guidance that differs from the defaults baked into the file.
+The first test run downloads the model if it is not cached. The test also needs direct access to the Mac Metal GPU.
 
-### Build documentation
-
-Configure the site name, description and author in [zensical.toml](./zensical.toml):
-
-```toml
-[project]
-site_name = "your-project-name"
-site_description = "Description of your python project"
-site_author = "Your Name"
-```
-
-Generate the static documentation with zensical:
+Run all quality checks:
 
 ```sh
-just docs
+just check
 ```
 
-The rendered site is written to the `site/` directory.
+## Project specification
 
-### View documentation for `src/main.py`
+See [project.md](project.md) for the full behavior and acceptance criteria.
 
-After running `just docs`, view the generated documentation. Zensical extracts docstrings and type information directly from your Python source files, keeping the documentation aligned with the implementation in `src/main.py`.
+## Main components
 
-## Just recipes
+- `renderer.py` renders PDF pages with `pypdfium2`.
+- `ocr.py` loads and runs Unlimited OCR through MLX-VLM.
+- `converter.py` controls temporary files and conversion.
+- `markdown.py` cleans the model output.
+- `cli.py` implements the installed command.
 
-Run `just` (or the default alias `just --list`) to see every command that ships with the template:
+## References
 
-```sh
-> just
-Available recipes:
-    run
-
-    [docs]
-    docs *args
-
-    [lifecycle]
-    clean        # Remove temporary files
-    install      # Ensure project virtualenv is up to date
-    update       # Update dependencies
-
-    [qa]
-    check *args
-    lint *args
-    test *args
-    typing *args
-```
-
-Each recipe is meant for a specific moment in your workflow:
-
-- `run`: Executes `python -m src.main` with `uv run`. Use this to exercise the main entry point locally once dependencies are synced.
-- `docs`: Builds documentation with zensical. Run after updating docstrings to regenerate documentation.
-- `clean`: Deletes build and cache artifacts (`.venv`, `.pytest_cache`, `.ruff_cache`, `.uv-cache`, `__pycache__`, `*.egg-info`). Reach for this if tooling behaves strangely or you want a fresh workspace before packaging or committing.
-- `install`: Calls `uv sync` to ensure the local virtual environment reflects `pyproject.toml`/`uv.lock`. Use after cloning or when dependencies change.
-- `update`: Runs `uv sync --upgrade` to refresh dependencies to their latest allowed versions. Follow up with `just check`/`just test` to confirm upgrades are safe.
-- `test`: Invokes `uv run -m pytest -q`. Run it before pushing or whenever you change behavior covered by the test suite.
-- `lint`: Runs Ruff with `--fix` so formatting and autofixable lint issues are corrected. Helpful during development to keep style consistent.
-- `typing`: Performs type checking with Ty. Use it when changing interfaces or touching typed modules.
-- `check`: Convenience wrapper that combines `lint` (without formatting churn beyond Ruff fixes) and `typing`. Ideal for pre-commit validation or CI parity.
+- [Baidu Unlimited OCR](https://huggingface.co/baidu/Unlimited-OCR)
+- [MLX-VLM Unlimited OCR support](https://github.com/Blaizzy/mlx-vlm/blob/main/mlx_vlm/models/unlimited_ocr/README.md)
+- [pypdfium2 documentation](https://pypdfium2.readthedocs.io/)

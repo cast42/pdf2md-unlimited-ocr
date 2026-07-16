@@ -27,8 +27,8 @@ check *args:
 docs *args:
     uv run zensical build {{args}}
 
-run:
-    uv run python -m src.main
+run *args:
+    uv run pdf2md-unlimited-ocr {{args}}
 
 # Remove temporary files
 [group('lifecycle')]
