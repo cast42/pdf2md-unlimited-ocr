@@ -5,23 +5,49 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+from .markdown import strip_ungrounded_preamble
+from .repetition import SlidingWindowNoRepeatNgramProcessor
+
 DEFAULT_MODEL = "baidu/Unlimited-OCR"
+DEFAULT_PAGES_PER_BATCH = 1
+_REPEATED_EMPTY_CELLS = "<td></td>" * 50
 
 
 class OcrError(RuntimeError):
     """Raised when the OCR model cannot load or generate text."""
 
 
+def validate_model_output(text: str, finish_reason: str | None) -> str:
+    """Reject empty, truncated, or structurally repetitive model output."""
+    if not text.strip():
+        raise OcrError("OCR returned no text")
+    if finish_reason == "length":
+        raise OcrError("OCR reached its output token limit before completing a page batch")
+
+    cleaned = strip_ungrounded_preamble(text)
+    compact_text = "".join(cleaned.split())
+    if _REPEATED_EMPTY_CELLS in compact_text:
+        raise OcrError("OCR produced a repeated empty table-cell sequence")
+    return cleaned
+
+
 class UnlimitedOcr:
     """A loaded Unlimited OCR model and processor."""
 
-    def __init__(self, model: Any, processor: Any) -> None:
+    def __init__(self, model: Any, processor: Any, pages_per_batch: int = DEFAULT_PAGES_PER_BATCH) -> None:
         """Store a loaded MLX model and processor."""
+        if pages_per_batch <= 0:
+            raise ValueError("Pages per batch must be a positive integer")
         self.model = model
         self.processor = processor
+        self.pages_per_batch = pages_per_batch
 
     @classmethod
-    def load(cls, model_id: str = DEFAULT_MODEL) -> UnlimitedOcr:
+    def load(
+        cls,
+        model_id: str = DEFAULT_MODEL,
+        pages_per_batch: int = DEFAULT_PAGES_PER_BATCH,
+    ) -> UnlimitedOcr:
         """Load the requested model with MLX-VLM."""
         try:
             from mlx_vlm import load
@@ -29,17 +55,26 @@ class UnlimitedOcr:
             model, processor = load(model_id)
         except Exception as error:
             raise OcrError(f"Could not load model {model_id}: {error}") from error
-        return cls(model, processor)
+        return cls(model, processor, pages_per_batch=pages_per_batch)
 
     def parse(self, image_paths: list[Path]) -> str:
         """Parse ordered PDF page images and return the model text."""
         if not image_paths:
             raise OcrError("No page images were provided to the OCR model")
 
+        outputs = []
+        for start in range(0, len(image_paths), self.pages_per_batch):
+            batch = image_paths[start : start + self.pages_per_batch]
+            outputs.append(self._parse_batch(batch))
+        return "\n<PAGE>\n".join(outputs)
+
+    def _parse_batch(self, image_paths: list[Path]) -> str:
+        """Parse one bounded batch of ordered page images."""
         try:
             from mlx_vlm import generate
             from mlx_vlm.prompt_utils import apply_chat_template
 
+            single_page = len(image_paths) == 1
             prompt = apply_chat_template(
                 self.processor,
                 self.model.config,
@@ -58,11 +93,10 @@ class UnlimitedOcr:
                 cropping=False,
                 image_size=1024,
                 base_size=1024,
+                logits_processors=[SlidingWindowNoRepeatNgramProcessor(35, 128 if single_page else 1024)],
                 verbose=False,
             )
         except Exception as error:
             raise OcrError(f"OCR failed: {error}") from error
 
-        if not result.text.strip():
-            raise OcrError("OCR returned no text")
-        return result.text
+        return validate_model_output(result.text, result.finish_reason)

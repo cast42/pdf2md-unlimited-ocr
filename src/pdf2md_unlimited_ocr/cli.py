@@ -9,7 +9,7 @@ from importlib.metadata import version
 from pathlib import Path
 
 from .converter import ConversionError, convert_pdf, markdown_path_for
-from .ocr import DEFAULT_MODEL, UnlimitedOcr
+from .ocr import DEFAULT_MODEL, DEFAULT_PAGES_PER_BATCH, UnlimitedOcr
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -24,6 +24,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--keep-images", action="store_true", help="Keep rendered page images.")
     parser.add_argument("--dpi", type=int, default=300, help="PDF render resolution. Default: 300.")
     parser.add_argument("--model", default=DEFAULT_MODEL, help=f"Hugging Face model. Default: {DEFAULT_MODEL}.")
+    parser.add_argument(
+        "--pages-per-batch",
+        type=int,
+        default=DEFAULT_PAGES_PER_BATCH,
+        help=f"Pages sent to each model call. Default: {DEFAULT_PAGES_PER_BATCH}.",
+    )
     parser.add_argument("--quiet", action="store_true", help="Hide normal progress messages.")
     parser.add_argument("--version", action="version", version=version("pdf2md-unlimited-ocr"))
     return parser
@@ -36,6 +42,8 @@ def _validate_inputs(args: argparse.Namespace, parser: argparse.ArgumentParser) 
         parser.error("--stdout requires exactly one PDF")
     if args.dpi <= 0:
         parser.error("--dpi must be a positive integer")
+    if args.pages_per_batch <= 0:
+        parser.error("--pages-per-batch must be a positive integer")
 
     for pdf_path in pdf_paths:
         if not pdf_path.exists():
@@ -58,7 +66,7 @@ def run(argv: Sequence[str] | None = None) -> int:
     try:
         if not args.quiet:
             print(f"Loading {args.model}", file=sys.stderr)
-        ocr = UnlimitedOcr.load(args.model)
+        ocr = UnlimitedOcr.load(args.model, pages_per_batch=args.pages_per_batch)
 
         for pdf_path in pdf_paths:
             if not args.quiet:

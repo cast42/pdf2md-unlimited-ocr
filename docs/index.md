@@ -10,13 +10,15 @@ uv run pdf2md-unlimited-ocr report.pdf
 
 Use `--stdout` to print one PDF as Markdown. Use `--keep-images` to retain the rendered page images. Use `--force` to replace an existing Markdown file.
 
+The tool processes one rendered page per model call by default. It keeps the model loaded, inserts page breaks itself, blocks repeated output, and rejects incomplete output.
+
 ## Run the tests
 
 ```sh
 just test
 ```
 
-The tests include a one page PDF to Markdown roundtrip with the real local OCR model.
+Run the test command to download publication 14159 from the Flemish government website into the ignored `data` directory. The test then converts the 22 page PDF with the local OCR model and checks that the false numbered preamble does not return.
 
 ## Python API
 

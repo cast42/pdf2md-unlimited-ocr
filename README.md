@@ -64,11 +64,13 @@ For each PDF, the tool:
 
 1. Creates a temporary directory.
 2. Renders each page as a numbered PNG image with PDFium.
-3. Passes the ordered images to `baidu/Unlimited-OCR` through MLX-VLM.
+3. Processes each page through `baidu/Unlimited-OCR` with MLX-VLM.
 4. Removes model control markers from the returned Markdown.
 5. Writes the Markdown and removes the temporary images.
 
 The `--keep-images` option keeps the temporary directory and prints its path to standard error.
+
+The model stays loaded while the tool processes every page. One page is sent per model call by default. The tool inserts page breaks itself, blocks repeated output, and rejects output that reaches the token limit. Use `--pages-per-batch` to change the batch size when you need to test multi-page inference.
 
 ## Test
 
@@ -78,9 +80,17 @@ Run the full test suite:
 just test
 ```
 
-The full suite includes a local OCR roundtrip. The test creates a one page PDF from a short Markdown string, converts the PDF through PDFium and the real Unlimited OCR model, and compares the generated Markdown with the starting Markdown. The test passes when their normalized text similarity is at least 80 percent.
+Run `just test` to call `scripts/download-test-data.fish` before pytest starts. The script saves publication 14159 from the Flemish government website as `data/14159.pdf`. Git ignores the `data` directory. If the file already exists, the script does not download it again.
+
+The full suite converts this 22 page PDF with the real Unlimited OCR model. The regression test checks that every page is present and that the false `1. 2. 3.` preamble does not return.
 
 The first test run downloads the model if it is not cached. The test also needs direct access to the Mac Metal GPU.
+
+Download the PDF fixture without running the tests:
+
+```sh
+just download-test-data
+```
 
 Run all quality checks:
 

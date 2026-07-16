@@ -59,7 +59,7 @@ MLX-VLM can load the original Baidu model directly. The first version must not d
 
 The model must be loaded once when the command starts and reused for every input PDF in that command.
 
-For PDF input, the tool must use the model settings documented for multi-page parsing:
+For PDF input, the tool must use these model settings:
 
 - Prompt: `Multi page parsing.`
 - Image mode: `base`
@@ -68,8 +68,12 @@ For PDF input, the tool must use the model settings documented for multi-page pa
 - Base size: 1024
 - Temperature: 0.0
 - Maximum output: 32,768 tokens
+- Repetition n-gram size: 35
+- Repetition window: 128 for one page and 1,024 for several pages
 
-The ordered page image paths must be passed to one multi-page model call for each PDF. The generated text must be treated as Markdown.
+The model must remain loaded while the tool processes a PDF. The default batch size is one page so the program controls every page boundary and each page gets its own output budget. The generated text must be treated as Markdown.
+
+The program must reject a batch when the model reaches the output token limit or generates a long run of repeated empty table cells. It must remove text emitted before the first grounded layout marker.
 
 ## PDF rendering
 
@@ -130,6 +134,7 @@ Planned options:
 - `--keep-images` keeps rendered page images and reports their directory.
 - `--dpi INTEGER` sets the render resolution. The default is 300.
 - `--model MODEL_ID` selects a compatible Hugging Face model. The default is `baidu/Unlimited-OCR`.
+- `--pages-per-batch INTEGER` sets the number of pages in each model call. The default is 1.
 - `--quiet` hides normal progress messages. Errors are still shown.
 - `--version` prints the installed program version.
 - `--help` prints command help.
@@ -156,7 +161,7 @@ For each PDF, the program must:
 
 1. Create a temporary directory.
 2. Render all pages to ordered PNG files with `pypdfium2`.
-3. Pass the complete ordered image list to Unlimited OCR through MLX-VLM.
+3. Pass ordered page batches to Unlimited OCR through MLX-VLM.
 4. Clean the generated Markdown.
 5. Write the Markdown to its final destination.
 6. Delete the temporary directory unless `--keep-images` is present.
@@ -182,13 +187,13 @@ When several PDFs are supplied, the first version stops at the first failure. Fi
 
 ## Privacy and downloads
 
-PDF content and rendered page images must stay on the local Mac. The only expected network access is the first model download from Hugging Face and later cache updates requested by the user.
+PDF content and rendered page images must stay on the local Mac. Expected network access includes the model download from Hugging Face and the public regression PDF downloaded by the test data script.
 
 The documentation must explain the model download size and cache location before release. The tool must use the normal Hugging Face cache instead of storing model weights inside the project.
 
 ## Testing
 
-Tests must not download or load the full OCR model. Unit tests must replace PDFium and MLX-VLM calls with test doubles.
+Unit tests must replace MLX-VLM calls with test doubles. The full test command also downloads the public regression fixture from `https://publicaties.vlaanderen.be/view-file/14159` and runs it through the real model on MLX. The fixture is stored as `data/14159.pdf`, and the complete `data` directory must be ignored by Git.
 
 The test suite must cover:
 
@@ -204,7 +209,7 @@ The test suite must cover:
 - Markdown control token cleanup
 - Exit status and error messages
 
-An optional manual integration test may use a small fixture PDF and a locally cached model on an Apple Silicon Mac.
+The integration test must confirm that all 22 pages of the regression fixture are converted and that the false numbered preamble does not appear. It requires an Apple Silicon Mac and may download the model when it is not already cached.
 
 ## Acceptance criteria
 

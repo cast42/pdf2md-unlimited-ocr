@@ -15,9 +15,17 @@ _DETECTION = re.compile(r"<\|det\|>.*?<\|/det\|>", flags=re.DOTALL)
 _PAGE = re.compile(r"\s*<PAGE>\s*")
 
 
+def strip_ungrounded_preamble(text: str) -> str:
+    """Remove text emitted before the first grounded layout marker."""
+    marker_position = text.find("<|det|>")
+    if marker_position <= 0:
+        return text
+    return text[marker_position:]
+
+
 def clean_markdown(text: str) -> str:
     """Remove model control markers and return normalized Markdown."""
-    cleaned = text
+    cleaned = strip_ungrounded_preamble(text)
     for token in _CONTROL_TOKENS:
         cleaned = cleaned.replace(token, "")
     cleaned = _DETECTION.sub("", cleaned)

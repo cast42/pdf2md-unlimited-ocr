@@ -7,8 +7,12 @@ set dotenv-load
     just --list
 
 [group('qa')]
-test *args:
+test *args: download-test-data
     uv run -m pytest -q {{args}}
+
+[group('qa')]
+download-test-data:
+    fish scripts/download-test-data.fish
 
 [group('qa')]
 lint *args:
