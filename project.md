@@ -44,7 +44,7 @@ Python 3.14 compatibility must be checked when dependencies are added. The imple
 The runtime dependencies are:
 
 - `pypdfium2` for rendering PDF pages as images
-- `mlx-vlm` version 0.6.4 or newer for Unlimited OCR support on Apple Silicon
+- `mlx-vlm` version 0.6.5 or newer for Unlimited OCR support on Apple Silicon
 - `mlx` as the local array and model runtime
 - `transformers` for the Hugging Face tokenizer and model support used by MLX-VLM
 - `Pillow` for image handling required by the model stack
@@ -69,7 +69,7 @@ For PDF input, the tool must use these model settings:
 - Temperature: 0.0
 - Maximum output: 32,768 tokens
 - Repetition n-gram size: 35
-- Repetition window: 128 for one page and 1,024 for several pages
+- Repetition window: 1,024 for PDF page batches
 
 The model must remain loaded while the tool processes a PDF. The default batch size is one page so the program controls every page boundary and each page gets its own output budget. The generated text must be treated as Markdown.
 

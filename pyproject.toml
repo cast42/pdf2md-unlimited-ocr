@@ -5,7 +5,7 @@ description = "Convert PDF files to Markdown locally with PDFium and Unlimited O
 readme = "README.md"
 requires-python = ">=3.14"
 dependencies = [
-    "mlx-vlm>=0.6.4",
+    "mlx-vlm>=0.6.5",
     "pillow>=12.3.0",
     "pypdfium2>=5.12.0",
 ]

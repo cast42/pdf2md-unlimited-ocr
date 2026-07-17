@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import Mock
 
 import pytest
 from reportlab.lib.pagesizes import A4
@@ -139,6 +141,38 @@ def test_ocr_splits_long_documents_into_page_batches() -> None:
     assert [len(batch) for batch in ocr.batches] == [4, 4, 2]
     assert [path for batch in ocr.batches for path in batch] == image_paths
     assert output.count("<PAGE>") == 2
+
+
+def test_pdf_ocr_uses_documented_unlimited_ocr_settings(monkeypatch: pytest.MonkeyPatch) -> None:
+    """PDF batches should use the settings documented by MLX-VLM."""
+    import mlx_vlm
+    import mlx_vlm.prompt_utils
+
+    model = SimpleNamespace(config=object())
+    processor = object()
+    template = Mock(return_value="<image>Multi page parsing.")
+    generate = Mock(return_value=SimpleNamespace(text="Parsed", finish_reason="stop"))
+    monkeypatch.setattr(mlx_vlm.prompt_utils, "apply_chat_template", template)
+    monkeypatch.setattr(mlx_vlm, "generate", generate)
+
+    output = UnlimitedOcr(model, processor)._parse_batch([Path("page_0001.png")])
+
+    assert output == "Parsed"
+    template.assert_called_once_with(processor, model.config, "Multi page parsing.", num_images=1)
+    call = generate.call_args.kwargs
+    assert call["model"] is model
+    assert call["processor"] is processor
+    assert call["image"] == ["page_0001.png"]
+    assert call["prompt"] == "<image>Multi page parsing."
+    assert call["max_tokens"] == 32768
+    assert call["temperature"] == 0.0
+    assert call["cropping"] is False
+    assert call["image_size"] == 1024
+    assert call["base_size"] == 1024
+    assert call["verbose"] is False
+    repetition_guard = call["logits_processors"][0]
+    assert repetition_guard.ngram_size == 35
+    assert repetition_guard.window == 1024
 
 
 @pytest.mark.integration

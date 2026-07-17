@@ -74,7 +74,6 @@ class UnlimitedOcr:
             from mlx_vlm import generate
             from mlx_vlm.prompt_utils import apply_chat_template
 
-            single_page = len(image_paths) == 1
             prompt = apply_chat_template(
                 self.processor,
                 self.model.config,
@@ -93,7 +92,7 @@ class UnlimitedOcr:
                 cropping=False,
                 image_size=1024,
                 base_size=1024,
-                logits_processors=[SlidingWindowNoRepeatNgramProcessor(35, 128 if single_page else 1024)],
+                logits_processors=[SlidingWindowNoRepeatNgramProcessor(35, 1024)],
                 verbose=False,
             )
         except Exception as error:
