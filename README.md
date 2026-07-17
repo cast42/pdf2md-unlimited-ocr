@@ -32,6 +32,11 @@ Convert one PDF and write `report.md` beside it:
 uv run pdf2md-unlimited-ocr report.pdf
 ```
 
+Detected photos, charts, figures, maps, and large complex tables are cropped into
+`report_assets` and linked from `report.md`. Complex tables retain their searchable
+OCR representation and include the crop as a visual fallback. Use `--no-images`
+when you only need text and tables.
+
 Convert several PDFs:
 
 ```sh
@@ -65,8 +70,9 @@ For each PDF, the tool:
 1. Creates a temporary directory.
 2. Renders each page as a numbered PNG image with PDFium.
 3. Processes each page through `baidu/Unlimited-OCR` with MLX-VLM.
-4. Removes model control markers from the returned Markdown.
-5. Writes the Markdown and removes the temporary images.
+4. Uses the grounded layout to retain reading order, headings, tables, and visual regions.
+5. Removes repeated headers, footers, page numbers, and model control markers.
+6. Writes the Markdown and visual assets, then removes the temporary page images.
 
 The `--keep-images` option keeps the temporary directory and prints its path to standard error.
 
@@ -83,13 +89,13 @@ Run the full test suite:
 just test
 ```
 
-Run `just test` to call `scripts/download-test-data.fish` before pytest starts. The script saves publication 14159 from the Flemish government website as `data/14159.pdf`. Git ignores the `data` directory. If the file already exists, the script does not download it again.
+Run `just test` to call `scripts/download-test-data.fish` before pytest starts. The script saves publication 14159 as `data/14159.pdf`. It also downloads the Traffic Safety Plan 2026 to 2030 and extracts pages 1, 21, 29, and 59 to `data/vvp-layout-sample.pdf`. Git ignores the `data` directory. The script reuses files that already exist.
 
 The full suite converts this 22 page PDF with the real Unlimited OCR model. The regression test checks that every page is present and that the false `1. 2. 3.` preamble does not return.
 
 The first test run downloads the model if it is not cached. The test also needs direct access to the Mac Metal GPU.
 
-Download the PDF fixture without running the tests:
+Download and extract the PDF fixtures without running the tests:
 
 ```sh
 just download-test-data

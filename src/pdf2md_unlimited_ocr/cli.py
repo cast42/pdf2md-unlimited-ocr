@@ -11,7 +11,7 @@ from pathlib import Path
 from rich.console import Console
 from rich.progress import BarColumn, MofNCompleteColumn, Progress, TextColumn, TimeRemainingColumn
 
-from .converter import ConversionError, convert_pdf, markdown_path_for
+from .converter import ConversionError, asset_path_for, convert_pdf, markdown_path_for
 from .ocr import DEFAULT_MODEL, DEFAULT_PAGES_PER_BATCH, UnlimitedOcr
 
 
@@ -25,6 +25,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--stdout", action="store_true", help="Print Markdown instead of writing a file.")
     parser.add_argument("--force", action="store_true", help="Replace an existing Markdown file.")
     parser.add_argument("--keep-images", action="store_true", help="Keep rendered page images.")
+    parser.add_argument(
+        "--no-images",
+        action="store_true",
+        help="Do not extract detected photos, charts, figures, maps, and complex tables.",
+    )
     parser.add_argument("--dpi", type=int, default=300, help="PDF render resolution. Default: 300.")
     parser.add_argument("--model", default=DEFAULT_MODEL, help=f"Hugging Face model. Default: {DEFAULT_MODEL}.")
     parser.add_argument(
@@ -57,6 +62,8 @@ def _validate_inputs(args: argparse.Namespace, parser: argparse.ArgumentParser) 
             parser.error(f"Input does not have a .pdf suffix: {pdf_path}")
         if not args.stdout and markdown_path_for(pdf_path).exists() and not args.force:
             parser.error(f"Output already exists: {markdown_path_for(pdf_path)}. Use --force to replace it.")
+        if not args.stdout and not args.no_images and asset_path_for(pdf_path).exists() and not args.force:
+            parser.error(f"Image output already exists: {asset_path_for(pdf_path)}. Use --force to replace it.")
     return pdf_paths
 
 
@@ -95,10 +102,13 @@ def run(argv: Sequence[str] | None = None) -> int:
                     ocr,
                     dpi=args.dpi,
                     keep_images=args.keep_images,
+                    asset_directory=None if args.stdout or args.no_images else asset_path_for(pdf_path),
                     progress=update_progress,
                 )
             if result.image_directory is not None:
                 print(f"Kept page images in {result.image_directory}", file=sys.stderr)
+            if result.asset_directory is not None and not args.quiet:
+                print(f"Wrote visual assets to {result.asset_directory}", file=sys.stderr)
             if args.stdout:
                 sys.stdout.write(result.markdown)
             else:

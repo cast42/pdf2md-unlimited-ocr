@@ -20,6 +20,10 @@ The tool must:
 - Run the model locally with MLX-VLM on Apple Silicon.
 - Use the MLX-VLM Python API. The tool must not start a vLLM, SGLang, or other model server.
 - Preserve page order from the PDF through OCR and Markdown output.
+- Preserve grounded reading order and promote detected titles to Markdown headings.
+- Save detected photos, charts, figures, maps, and large tables as linked visual assets.
+- Keep searchable OCR for large tables and include a visual crop as a quality fallback.
+- Remove running headers, footers, page numbers, and duplicate grounded blocks.
 - Delete temporary page images after each PDF is processed.
 - Keep the temporary page images when the user passes `--keep-images`.
 - Write Markdown files beside the source PDFs by default.
@@ -132,6 +136,7 @@ Planned options:
 - `--stdout` prints Markdown instead of writing a file. It requires one input PDF.
 - `--force` replaces an existing Markdown file.
 - `--keep-images` keeps rendered page images and reports their directory.
+- `--no-images` disables extraction of visual assets.
 - `--dpi INTEGER` sets the render resolution. The default is 300.
 - `--model MODEL_ID` selects a compatible Hugging Face model. The default is `baidu/Unlimited-OCR`.
 - `--pages-per-batch INTEGER` sets the number of pages in each model call. The default is 1.
@@ -193,7 +198,9 @@ The documentation must explain the model download size and cache location before
 
 ## Testing
 
-Unit tests must replace MLX-VLM calls with test doubles. The full test command also downloads the public regression fixture from `https://publicaties.vlaanderen.be/view-file/14159` and runs it through the real model on MLX. The fixture is stored as `data/14159.pdf`, and the complete `data` directory must be ignored by Git.
+Unit tests must replace MLX-VLM calls with test doubles. The full test command also downloads the public regression fixture from `https://publicaties.vlaanderen.be/view-file/14159` and runs it through the real model on MLX. The fixture is stored as `data/14159.pdf`.
+
+The test data script must also download the Traffic Safety Plan 2026 to 2030. It must use PDFium to extract source pages 1, 21, 29, and 59 in that order to `data/vvp-layout-sample.pdf`. The complete `data` directory must be ignored by Git.
 
 The test suite must cover:
 

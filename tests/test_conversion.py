@@ -8,10 +8,11 @@ from types import SimpleNamespace
 from unittest.mock import Mock
 
 import pytest
+from PIL import Image
 from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen.canvas import Canvas
 
-from pdf2md_unlimited_ocr.converter import convert_pdf
+from pdf2md_unlimited_ocr.converter import asset_path_for, convert_pdf
 from pdf2md_unlimited_ocr.markdown import clean_markdown, strip_ungrounded_preamble
 from pdf2md_unlimited_ocr.ocr import OcrError, UnlimitedOcr, validate_model_output
 from pdf2md_unlimited_ocr.repetition import banned_next_tokens
@@ -81,6 +82,55 @@ def test_clean_markdown_removes_model_tokens() -> None:
     model_text = "<｜begin▁of▁sentence｜><|det|>text [1, 2, 3, 4]<|/det|>Hello<PAGE>World<｜end▁of▁sentence｜>"
 
     assert clean_markdown(model_text) == "Hello\n\n<!-- Page break -->\n\nWorld\n"
+
+
+def test_grounded_layout_extracts_visuals_and_removes_running_headers(tmp_path: Path) -> None:
+    """Detected layout should become headings, captions, and cropped images."""
+    pdf_path = tmp_path / "road safety.pdf"
+    markdown_to_pdf(SOURCE_MARKDOWN, pdf_path)
+    asset_directory = asset_path_for(pdf_path)
+
+    class LayoutOcr:
+        """Return representative grounded model output."""
+
+        def parse(self, image_paths: list[Path], *, progress: object = None) -> str:
+            del image_paths, progress
+            return (
+                "<|det|>header [100, 20, 900, 50]<|/det|>Running report header\n"
+                "<|det|>title [100, 80, 900, 140]<|/det|>Road safety plan\n"
+                "<|det|>image [100, 200, 900, 700]<|/det|>\n"
+                "<|det|>image_caption [100, 710, 900, 750]<|/det|>Cyclists on a safe street\n"
+                "<|det|>text [100, 760, 200, 790]<|/det|>Wie\n"
+                "<|det|>text [400, 760, 500, 790]<|/det|>Wat\n"
+                "<|det|>text [800, 760, 900, 790]<|/det|>Timing\n"
+                "<|det|>table [100, 800, 250, 880]<|/det|><table><tr><td>Partner</td></tr></table>\n"
+                "<|det|>table [400, 800, 700, 880]<|/det|><table><tr><td>Action</td></tr></table>\n"
+                "<|det|>table [800, 800, 900, 880]<|/det|><table><tr><td>2026</td></tr></table>\n"
+                "<|det|>text [100, 920, 500, 940]<|/det|>Unique grounded text\n"
+                "<|det|>text [100, 920, 500, 940]<|/det|>Repeated hallucination\n"
+                "<|det|>page_number [900, 950, 950, 980]<|/det|>1\n"
+                "<PAGE>\n"
+                "<|det|>header [100, 20, 900, 50]<|/det|>Repeated running header\n"
+                "<|det|>text [100, 100, 900, 150]<|/det|>Second page text"
+            )
+
+    result = convert_pdf(pdf_path, LayoutOcr(), dpi=72, asset_directory=asset_directory)
+
+    assert result.asset_directory == asset_directory
+    assert "# Road safety plan\n\n![Cyclists on a safe street]" in result.markdown
+    assert "*Cyclists on a safe street*" in result.markdown
+    assert "<table><tr><td>2026</td></tr></table>" in result.markdown
+    assert "Unique grounded text" in result.markdown
+    assert "Repeated hallucination" not in result.markdown
+    assert "Running report header" in result.markdown
+    assert "Repeated running header" not in result.markdown
+    assert "Second page text" in result.markdown
+    image_path = asset_directory / "page_0001_image_01.png"
+    assert image_path.is_file()
+    with Image.open(image_path) as image:
+        assert image.width > 450
+        assert image.height > 400
+    assert (asset_directory / "page_0001_table_02.png").is_file()
 
 
 @pytest.mark.parametrize("prefix", ["3.2.1\n", "1. 2. 3. 4. 5.\n", "2018-2019\n", "2017年1月1日\n"])
