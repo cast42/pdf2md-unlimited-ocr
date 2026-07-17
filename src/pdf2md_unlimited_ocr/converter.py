@@ -9,10 +9,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
 
-from .markdown import ImageDescriptionCallback, contains_describable_visuals, render_grounded_markdown
+from .markdown import ImageDescriptionCallback, count_describable_visuals, render_grounded_markdown
 from .renderer import render_pdf
 
-ImageDescriptionLoader = Callable[[], ImageDescriptionCallback]
+ImageDescriptionLoader = Callable[[int], ImageDescriptionCallback]
 
 
 class OcrBackend(Protocol):
@@ -75,13 +75,10 @@ def convert_pdf(
         image_paths = render_pdf(pdf_path, image_directory, dpi=dpi)
         temporary_assets = image_directory / "assets" if asset_directory is not None else None
         model_output = ocr.parse(image_paths, progress=progress)
-        if (
-            description_loader is not None
-            and asset_directory is not None
-            and contains_describable_visuals(model_output)
-        ):
+        visual_count = count_describable_visuals(model_output)
+        if description_loader is not None and asset_directory is not None and visual_count > 0:
             del ocr
-            describe_image = description_loader()
+            describe_image = description_loader(visual_count)
         document = render_grounded_markdown(
             model_output,
             image_paths,

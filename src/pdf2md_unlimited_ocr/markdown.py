@@ -66,20 +66,27 @@ def clean_markdown(text: str) -> str:
     return f"{cleaned}\n" if cleaned else ""
 
 
-def contains_describable_visuals(text: str) -> bool:
-    """Return whether grounded output contains a visual that will be extracted."""
+def count_describable_visuals(text: str) -> int:
+    """Count grounded visuals that will be extracted and described."""
+    visual_count = 0
     pages = _PAGE.split(_remove_control_tokens(strip_ungrounded_preamble(text)))
     for page in pages:
         blocks = _grounded_blocks(page)
-        if _fragmented_table(blocks) is not None:
-            return True
+        fragmented_table = _fragmented_table(blocks)
+        if fragmented_table is not None:
+            visual_count += 1
         for block in blocks:
             label = _normalized_label(block.label)
             if label in _VISUAL_LABELS:
-                return True
-            if label == "table" and _box_area(block.box) >= _COMPLEX_TABLE_AREA:
-                return True
-    return False
+                visual_count += 1
+            if fragmented_table is None and label == "table" and _box_area(block.box) >= _COMPLEX_TABLE_AREA:
+                visual_count += 1
+    return visual_count
+
+
+def contains_describable_visuals(text: str) -> bool:
+    """Return whether grounded output contains a visual that will be extracted."""
+    return count_describable_visuals(text) > 0
 
 
 def render_grounded_markdown(

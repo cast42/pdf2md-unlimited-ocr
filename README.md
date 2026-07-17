@@ -101,6 +101,17 @@ The `--keep-images` option keeps the temporary directory and prints its path to 
 The command shows a Rich progress bar with the number of completed pages and the estimated time remaining. Use
 `--quiet` to hide it. Progress is written to standard error, so `--stdout` still emits only Markdown on standard output.
 
+When `--describe-images` is enabled and OCR finds visuals, a second Rich progress
+bar shows completed image descriptions. After a successful command, a Rich table
+reports total processing time, time per page, Markdown conversion time, and image
+description time. The table labels Markdown statistics as per page and image
+description statistics as per image. It includes the average, minimum, p25, p50,
+p75, and maximum time. Model loading, rendering, output, and cleanup remain part of
+their matching phase and are divided evenly across that phase's pages or images.
+When `--pages-per-batch` is greater than one, each batch's time is divided evenly
+across the pages in that batch.
+Use `--quiet` to hide the progress bars and statistics.
+
 The OCR model stays loaded while the tool processes every page. One page is sent per model call by default. Every batch uses the documented PDF settings. The prompt is `Multi page parsing.`, and the model uses base image mode with a 1,024 pixel image size. Generation uses a temperature of 0.0 and an output limit of 32,768 tokens. The tool inserts page breaks itself. It applies the optional 35 token repetition guard with a 1,024 token window and rejects output that reaches the token limit. Use `--pages-per-batch` to change the batch size when you need to test multi-page inference.
 
 ## Test

@@ -14,7 +14,13 @@ from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen.canvas import Canvas
 
 from pdf2md_unlimited_ocr.converter import asset_path_for, convert_pdf
-from pdf2md_unlimited_ocr.cli import build_parser
+from pdf2md_unlimited_ocr.cli import (
+    allocate_phase_overhead,
+    build_parser,
+    format_duration,
+    percentile,
+    print_statistics,
+)
 from pdf2md_unlimited_ocr.image_understanding import ImageDescriber, ImageUnderstandingError
 from pdf2md_unlimited_ocr.markdown import ImageDescriptionCallback, clean_markdown, strip_ungrounded_preamble
 from pdf2md_unlimited_ocr.ocr import OcrError, UnlimitedOcr, validate_model_output
@@ -118,8 +124,8 @@ def test_conversion_loads_image_model_after_ocr(tmp_path: Path) -> None:
             super().parse(image_paths, progress=progress)
             return "<|det|>image [100, 100, 900, 900]<|/det|>"
 
-    def load_description() -> ImageDescriptionCallback:
-        events.append("load image model")
+    def load_description(visual_count: int) -> ImageDescriptionCallback:
+        events.append(f"load image model for {visual_count} visual")
         return lambda image_path, context: f"{image_path.name}: {context}"
 
     convert_pdf(
@@ -129,7 +135,7 @@ def test_conversion_loads_image_model_after_ocr(tmp_path: Path) -> None:
         description_loader=load_description,
     )
 
-    assert events == ["ocr", "load image model"]
+    assert events == ["ocr", "load image model for 1 visual"]
 
 
 def test_conversion_skips_image_model_when_ocr_finds_no_visual(tmp_path: Path) -> None:
@@ -146,6 +152,49 @@ def test_conversion_skips_image_model_when_ocr_finds_no_visual(tmp_path: Path) -
     )
 
     loader.assert_not_called()
+
+
+def test_conversion_statistics_report_phase_speed() -> None:
+    """The Rich statistics table should label page and image distributions."""
+    from rich.console import Console
+
+    console = Console(record=True, width=100, color_system=None)
+
+    print_statistics(
+        console,
+        total_seconds=64.0,
+        markdown_seconds=40.0,
+        image_seconds=24.0,
+        markdown_page_timings=[4.0, 8.0, 12.0, 16.0],
+        image_timings=[4.0, 8.0, 12.0],
+    )
+
+    output = console.export_text()
+    assert format_duration(65.2) == "1m 5.2s"
+    assert "Conversion statistics: 4 pages, 3 described images" in output
+    assert "All processing" in output
+    assert "Markdown conversion" in output
+    assert "Image descriptions" in output
+    assert "page" in output
+    assert "image" in output
+    assert "Average" in output
+    assert "P25" in output
+    assert "P50" in output
+    assert "P75" in output
+    assert "10.00 s" in output
+    assert "7.00 s" in output
+    assert "10.00 s" in output
+    assert "13.00 s" in output
+
+
+def test_statistics_allocate_shared_overhead_and_interpolate_percentiles() -> None:
+    """Shared phase time should be reflected in every per-unit statistic."""
+    timings = allocate_phase_overhead(14.0, [2.0, 4.0], 2)
+
+    assert timings == [6.0, 8.0]
+    assert percentile([4.0, 8.0, 12.0, 16.0], 0.25) == 7.0
+    assert percentile([4.0, 8.0, 12.0, 16.0], 0.50) == 10.0
+    assert percentile([4.0, 8.0, 12.0, 16.0], 0.75) == 13.0
 
 
 def test_clean_markdown_removes_model_tokens() -> None:
