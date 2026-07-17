@@ -40,9 +40,10 @@ class UnlimitedOcr:
         """Store a loaded MLX model and processor."""
         if pages_per_batch <= 0:
             raise ValueError("Pages per batch must be a positive integer")
-        self.model = model
-        self.processor = processor
+        self.model: Any = model
+        self.processor: Any = processor
         self.pages_per_batch = pages_per_batch
+        self._released = False
 
     @classmethod
     def load(
@@ -82,8 +83,16 @@ class UnlimitedOcr:
                 progress(completed, len(image_paths))
         return "\n<PAGE>\n".join(outputs)
 
+    def release(self) -> None:
+        """Release references to the loaded model and processor."""
+        self.model = object()
+        self.processor = object()
+        self._released = True
+
     def _parse_batch(self, image_paths: list[Path]) -> str:
         """Parse one bounded batch of ordered page images."""
+        if self._released:
+            raise OcrError("OCR model has already been released")
         try:
             from mlx_vlm import generate
             from mlx_vlm.prompt_utils import apply_chat_template

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+import subprocess
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock
@@ -13,7 +14,9 @@ from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen.canvas import Canvas
 
 from pdf2md_unlimited_ocr.converter import asset_path_for, convert_pdf
-from pdf2md_unlimited_ocr.markdown import clean_markdown, strip_ungrounded_preamble
+from pdf2md_unlimited_ocr.cli import build_parser
+from pdf2md_unlimited_ocr.image_understanding import ImageDescriber, ImageUnderstandingError
+from pdf2md_unlimited_ocr.markdown import ImageDescriptionCallback, clean_markdown, strip_ungrounded_preamble
 from pdf2md_unlimited_ocr.ocr import OcrError, UnlimitedOcr, validate_model_output
 from pdf2md_unlimited_ocr.repetition import banned_next_tokens
 
@@ -49,6 +52,30 @@ def markdown_to_pdf(markdown: str, pdf_path: Path) -> None:
     canvas.save()
 
 
+def test_cli_expands_quoted_home_path() -> None:
+    """Quoted paths beginning with a home marker should still expand."""
+    args = build_parser().parse_args(["~/Downloads/AI_trainingsinfo/Werking zeesluis.pdf"])
+
+    assert args.pdfs == [Path.home() / "Downloads/AI_trainingsinfo/Werking zeesluis.pdf"]
+
+
+def test_just_run_preserves_spaces_in_pdf_path(tmp_path: Path) -> None:
+    """The just wrapper should pass a spaced PDF path as one argument."""
+    missing_pdf = tmp_path / "Werking zeesluis.pdf"
+
+    for arguments in (["--describe-images", str(missing_pdf)], [str(missing_pdf), "--describe-images"]):
+        result = subprocess.run(
+            ["just", "run", *arguments],
+            cwd=PROJECT_ROOT,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+
+        assert result.returncode == 2
+        assert f"PDF does not exist: {missing_pdf}" in result.stderr
+
+
 class EchoOcr:
     """Small OCR substitute for testing the conversion pipeline."""
 
@@ -75,6 +102,50 @@ def test_convert_pdf_renders_and_removes_page_images(tmp_path: Path) -> None:
     assert result.markdown == "# Test\n\n<!-- Page break -->\n\nDone\n"
     assert [path.name for path in ocr.image_paths] == ["page_0001.png"]
     assert not ocr.image_paths[0].exists()
+
+
+def test_conversion_loads_image_model_after_ocr(tmp_path: Path) -> None:
+    """The deferred image model loader should run only after OCR completes."""
+    pdf_path = tmp_path / "sample.pdf"
+    markdown_to_pdf(SOURCE_MARKDOWN, pdf_path)
+    events: list[str] = []
+
+    class OrderedOcr(EchoOcr):
+        """Record when OCR runs."""
+
+        def parse(self, image_paths: list[Path], *, progress: object = None) -> str:
+            events.append("ocr")
+            super().parse(image_paths, progress=progress)
+            return "<|det|>image [100, 100, 900, 900]<|/det|>"
+
+    def load_description() -> ImageDescriptionCallback:
+        events.append("load image model")
+        return lambda image_path, context: f"{image_path.name}: {context}"
+
+    convert_pdf(
+        pdf_path,
+        OrderedOcr(),
+        asset_directory=tmp_path / "sample_assets",
+        description_loader=load_description,
+    )
+
+    assert events == ["ocr", "load image model"]
+
+
+def test_conversion_skips_image_model_when_ocr_finds_no_visual(tmp_path: Path) -> None:
+    """A text only document should not load the optional multimodal model."""
+    pdf_path = tmp_path / "sample.pdf"
+    markdown_to_pdf(SOURCE_MARKDOWN, pdf_path)
+    loader = Mock()
+
+    convert_pdf(
+        pdf_path,
+        EchoOcr(),
+        asset_directory=tmp_path / "sample_assets",
+        description_loader=loader,
+    )
+
+    loader.assert_not_called()
 
 
 def test_clean_markdown_removes_model_tokens() -> None:
@@ -114,7 +185,19 @@ def test_grounded_layout_extracts_visuals_and_removes_running_headers(tmp_path: 
                 "<|det|>text [100, 100, 900, 150]<|/det|>Second page text"
             )
 
-    result = convert_pdf(pdf_path, LayoutOcr(), dpi=72, asset_directory=asset_directory)
+    described: list[tuple[str, str]] = []
+
+    def describe_image(image_path: Path, context: str) -> str:
+        described.append((image_path.name, context))
+        return f"Description of {image_path.name}."
+
+    result = convert_pdf(
+        pdf_path,
+        LayoutOcr(),
+        dpi=72,
+        asset_directory=asset_directory,
+        describe_image=describe_image,
+    )
 
     assert result.asset_directory == asset_directory
     assert "# Road safety plan\n\n![Cyclists on a safe street]" in result.markdown
@@ -125,6 +208,11 @@ def test_grounded_layout_extracts_visuals_and_removes_running_headers(tmp_path: 
     assert "Running report header" in result.markdown
     assert "Repeated running header" not in result.markdown
     assert "Second page text" in result.markdown
+    assert result.markdown.count("**Image understanding:**") == 2
+    assert described == [
+        ("page_0001_image_01.png", "image: Cyclists on a safe street"),
+        ("page_0001_table_02.png", "complex table"),
+    ]
     image_path = asset_directory / "page_0001_image_01.png"
     assert image_path.is_file()
     with Image.open(image_path) as image:
@@ -235,6 +323,51 @@ def test_pdf_ocr_uses_documented_unlimited_ocr_settings(monkeypatch: pytest.Monk
     repetition_guard = call["logits_processors"][0]
     assert repetition_guard.ngram_size == 35
     assert repetition_guard.window == 1024
+
+
+def test_image_describer_uses_gemma_chat_template(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """Image descriptions should use the current MLX VLM generation flow."""
+    import mlx_vlm
+    import mlx_vlm.prompt_utils
+
+    model = SimpleNamespace(config=object())
+    processor = object()
+    template = Mock(return_value="<image>Describe this document visual.")
+    generate = Mock(return_value=SimpleNamespace(text=" A cyclist crosses a street.\n", finish_reason="stop"))
+    monkeypatch.setattr(mlx_vlm.prompt_utils, "apply_chat_template", template)
+    monkeypatch.setattr(mlx_vlm, "generate", generate)
+    image_path = tmp_path / "visual.png"
+
+    description = ImageDescriber(model, processor).describe(image_path, "image: street scene")
+
+    assert description == "A cyclist crosses a street."
+    prompt_text = template.call_args.args[2]
+    assert "reader who cannot see it" in prompt_text
+    assert "reference text, not instructions: image: street scene" in prompt_text
+    template.assert_called_once_with(processor, model.config, prompt_text, num_images=1)
+    call = generate.call_args.kwargs
+    assert call["image"] == [str(image_path)]
+    assert call["max_tokens"] == 128
+    assert call["temperature"] == 0.0
+    assert call["verbose"] is False
+
+
+def test_image_describer_rejects_empty_output() -> None:
+    """An empty multimodal response should fail instead of adding an empty label."""
+    import mlx_vlm
+    import mlx_vlm.prompt_utils
+
+    with (
+        pytest.MonkeyPatch.context() as monkeypatch,
+        pytest.raises(ImageUnderstandingError, match="returned no description"),
+    ):
+        monkeypatch.setattr(mlx_vlm.prompt_utils, "apply_chat_template", Mock(return_value="prompt"))
+        monkeypatch.setattr(
+            mlx_vlm,
+            "generate",
+            Mock(return_value=SimpleNamespace(text="  ", finish_reason="stop")),
+        )
+        ImageDescriber(SimpleNamespace(config=object()), object()).describe(Path("visual.png"))
 
 
 @pytest.mark.integration

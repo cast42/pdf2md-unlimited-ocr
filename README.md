@@ -37,6 +37,28 @@ Detected photos, charts, figures, maps, and large complex tables are cropped int
 OCR representation and include the crop as a visual fallback. Use `--no-images`
 when you only need text and tables.
 
+Add a short description below every extracted visual:
+
+```sh
+uv run pdf2md-unlimited-ocr --describe-images report.pdf
+```
+
+Quote paths that contain spaces. The `just run` wrapper preserves quoted paths,
+and the CLI expands a leading `~` even when the path is quoted:
+
+```sh
+just run --describe-images "~/Downloads/AI_trainingsinfo/Werking zeesluis.pdf"
+```
+
+Image understanding uses `mlx-community/gemma-4-12B-it-qat-4bit` by default. The
+model runs locally through MLX VLM. Each description appears below its image as
+`**Image understanding:**`. Use `--image-model` to select another compatible
+multimodal model.
+
+The tool finishes OCR and releases the OCR model before loading Gemma 4. The two
+models are not kept in memory together. Gemma 4 is not loaded when OCR finds no
+visuals to describe.
+
 Convert several PDFs:
 
 ```sh
@@ -79,7 +101,7 @@ The `--keep-images` option keeps the temporary directory and prints its path to 
 The command shows a Rich progress bar with the number of completed pages and the estimated time remaining. Use
 `--quiet` to hide it. Progress is written to standard error, so `--stdout` still emits only Markdown on standard output.
 
-The model stays loaded while the tool processes every page. One page is sent per model call by default. Every batch uses the documented PDF settings. The prompt is `Multi page parsing.`, and the model uses base image mode with a 1,024 pixel image size. Generation uses a temperature of 0.0 and an output limit of 32,768 tokens. The tool inserts page breaks itself. It applies the optional 35 token repetition guard with a 1,024 token window and rejects output that reaches the token limit. Use `--pages-per-batch` to change the batch size when you need to test multi-page inference.
+The OCR model stays loaded while the tool processes every page. One page is sent per model call by default. Every batch uses the documented PDF settings. The prompt is `Multi page parsing.`, and the model uses base image mode with a 1,024 pixel image size. Generation uses a temperature of 0.0 and an output limit of 32,768 tokens. The tool inserts page breaks itself. It applies the optional 35 token repetition guard with a 1,024 token window and rejects output that reaches the token limit. Use `--pages-per-batch` to change the batch size when you need to test multi-page inference.
 
 ## Test
 

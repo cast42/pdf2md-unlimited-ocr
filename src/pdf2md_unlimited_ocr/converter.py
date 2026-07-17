@@ -9,8 +9,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
 
-from .markdown import render_grounded_markdown
+from .markdown import ImageDescriptionCallback, contains_describable_visuals, render_grounded_markdown
 from .renderer import render_pdf
+
+ImageDescriptionLoader = Callable[[], ImageDescriptionCallback]
 
 
 class OcrBackend(Protocol):
@@ -61,18 +63,31 @@ def convert_pdf(
     dpi: int = 300,
     keep_images: bool = False,
     asset_directory: Path | None = None,
+    describe_image: ImageDescriptionCallback | None = None,
+    description_loader: ImageDescriptionLoader | None = None,
     progress: Callable[[int, int], None] | None = None,
 ) -> ConversionResult:
     """Render a PDF, run OCR, preserve its layout, and remove page images."""
+    if describe_image is not None and description_loader is not None:
+        raise ValueError("Pass either describe_image or description_loader, not both")
     image_directory = Path(tempfile.mkdtemp(prefix=f"pdf2md-{pdf_path.stem}-"))
     try:
         image_paths = render_pdf(pdf_path, image_directory, dpi=dpi)
         temporary_assets = image_directory / "assets" if asset_directory is not None else None
+        model_output = ocr.parse(image_paths, progress=progress)
+        if (
+            description_loader is not None
+            and asset_directory is not None
+            and contains_describable_visuals(model_output)
+        ):
+            del ocr
+            describe_image = description_loader()
         document = render_grounded_markdown(
-            ocr.parse(image_paths, progress=progress),
+            model_output,
             image_paths,
             asset_directory=temporary_assets,
             asset_reference=Path(asset_directory.name) if asset_directory is not None else None,
+            describe_image=describe_image,
         )
         published_assets = None
         if asset_directory is not None and document.asset_count:

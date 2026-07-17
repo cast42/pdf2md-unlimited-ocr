@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -26,6 +27,7 @@ _COMPLEX_TABLE_AREA = 60_000
 _RUNNING_LABELS = {"footer", "header", "page_footer", "page_header"}
 _HEADING_LEVELS = {"section_header": 3, "title": 2}
 _COLUMN_HEADER_WORDS = {"timing", "wat", "what", "when", "who", "wie"}
+ImageDescriptionCallback = Callable[[Path, str], str]
 
 
 @dataclass(frozen=True)
@@ -64,12 +66,29 @@ def clean_markdown(text: str) -> str:
     return f"{cleaned}\n" if cleaned else ""
 
 
+def contains_describable_visuals(text: str) -> bool:
+    """Return whether grounded output contains a visual that will be extracted."""
+    pages = _PAGE.split(_remove_control_tokens(strip_ungrounded_preamble(text)))
+    for page in pages:
+        blocks = _grounded_blocks(page)
+        if _fragmented_table(blocks) is not None:
+            return True
+        for block in blocks:
+            label = _normalized_label(block.label)
+            if label in _VISUAL_LABELS:
+                return True
+            if label == "table" and _box_area(block.box) >= _COMPLEX_TABLE_AREA:
+                return True
+    return False
+
+
 def render_grounded_markdown(
     text: str,
     image_paths: list[Path],
     *,
     asset_directory: Path | None = None,
     asset_reference: Path | None = None,
+    describe_image: ImageDescriptionCallback | None = None,
 ) -> MarkdownDocument:
     """Preserve grounded layout and optionally crop detected visual regions."""
     pages = _PAGE.split(_remove_control_tokens(strip_ungrounded_preamble(text)))
@@ -96,7 +115,15 @@ def render_grounded_markdown(
                 asset_name = f"page_{page_index + 1:04d}_table_{visual_number:02d}.png"
                 if _crop_visual(image_paths[page_index], fragmented_table[1], asset_directory / asset_name):
                     reference = (asset_reference or asset_directory) / asset_name
-                    page_parts.append(_image_markdown(reference, f"Table on page {page_index + 1}"))
+                    page_parts.append(
+                        _visual_markdown(
+                            reference,
+                            f"Table on page {page_index + 1}",
+                            asset_directory / asset_name,
+                            "complex table",
+                            describe_image,
+                        )
+                    )
                     asset_count += 1
             if label in _VISUAL_LABELS:
                 visual_number += 1
@@ -105,7 +132,15 @@ def render_grounded_markdown(
                     asset_name = f"page_{page_index + 1:04d}_{label}_{visual_number:02d}.png"
                     if _crop_visual(image_paths[page_index], block.box, asset_directory / asset_name):
                         reference = (asset_reference or asset_directory) / asset_name
-                        page_parts.append(_image_markdown(reference, caption or label.title()))
+                        page_parts.append(
+                            _visual_markdown(
+                                reference,
+                                caption or label.title(),
+                                asset_directory / asset_name,
+                                f"{label}: {caption}" if caption else label,
+                                describe_image,
+                            )
+                        )
                         asset_count += 1
                 continue
             if label == "table":
@@ -119,7 +154,15 @@ def render_grounded_markdown(
                     asset_name = f"page_{page_index + 1:04d}_table_{visual_number:02d}.png"
                     if _crop_visual(image_paths[page_index], block.box, asset_directory / asset_name):
                         reference = (asset_reference or asset_directory) / asset_name
-                        page_parts.append(_image_markdown(reference, f"Table on page {page_index + 1}"))
+                        page_parts.append(
+                            _visual_markdown(
+                                reference,
+                                f"Table on page {page_index + 1}",
+                                asset_directory / asset_name,
+                                "complex table",
+                                describe_image,
+                            )
+                        )
                         asset_count += 1
                 if content:
                     page_parts.append(content)
@@ -266,3 +309,19 @@ def _image_markdown(reference: Path, alt_text: str) -> str:
     path = reference.as_posix()
     target = f"<{path}>" if " " in path else path
     return f"![{alt_text}]({target})"
+
+
+def _visual_markdown(
+    reference: Path,
+    alt_text: str,
+    image_path: Path,
+    context: str,
+    describe_image: ImageDescriptionCallback | None,
+) -> str:
+    """Build an image link and its optional multimodal description."""
+    parts = [_image_markdown(reference, alt_text)]
+    if describe_image is not None:
+        description = describe_image(image_path, context).strip()
+        if description:
+            parts.append(f"**Image understanding:** {description}")
+    return "\n\n".join(parts)

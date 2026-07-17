@@ -31,8 +31,9 @@ check *args:
 docs *args:
     uv run zensical build {{args}}
 
+[positional-arguments]
 run *args:
-    uv run pdf2md-unlimited-ocr {{args}}
+    uv run pdf2md-unlimited-ocr "$@"
 
 # Remove temporary files
 [group('lifecycle')]

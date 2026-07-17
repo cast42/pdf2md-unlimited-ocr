@@ -23,6 +23,7 @@ The tool must:
 - Preserve grounded reading order and promote detected titles to Markdown headings.
 - Save detected photos, charts, figures, maps, and large tables as linked visual assets.
 - Keep searchable OCR for large tables and include a visual crop as a quality fallback.
+- Optionally describe extracted visuals with a local multimodal model.
 - Remove running headers, footers, page numbers, and duplicate grounded blocks.
 - Delete temporary page images after each PDF is processed.
 - Keep the temporary page images when the user passes `--keep-images`.
@@ -61,7 +62,7 @@ The default model is `baidu/Unlimited-OCR` from Hugging Face.
 
 MLX-VLM can load the original Baidu model directly. The first version must not depend on a community conversion or quantized copy of the model. A model option may be added so a user can test another compatible Hugging Face model later.
 
-The model must be loaded once when the command starts and reused for every input PDF in that command.
+The OCR model must be loaded once and reused for every input PDF during normal conversion. When image understanding is enabled, each PDF must finish OCR before the program releases the OCR model and loads the image model. The program must not keep both models in memory at the same time.
 
 For PDF input, the tool must use these model settings:
 
@@ -137,6 +138,8 @@ Planned options:
 - `--force` replaces an existing Markdown file.
 - `--keep-images` keeps rendered page images and reports their directory.
 - `--no-images` disables extraction of visual assets.
+- `--describe-images` adds a short image understanding description below each visual.
+- `--image-model MODEL_ID` selects the multimodal description model. The default is `mlx-community/gemma-4-12B-it-qat-4bit`.
 - `--dpi INTEGER` sets the render resolution. The default is 300.
 - `--model MODEL_ID` selects a compatible Hugging Face model. The default is `baidu/Unlimited-OCR`.
 - `--pages-per-batch INTEGER` sets the number of pages in each model call. The default is 1.
@@ -236,4 +239,6 @@ The first version is complete when:
 - [Baidu Unlimited OCR](https://huggingface.co/baidu/Unlimited-OCR)
 - [Unlimited OCR source repository](https://github.com/baidu/Unlimited-OCR)
 - [MLX-VLM Unlimited OCR documentation](https://github.com/Blaizzy/mlx-vlm/blob/main/mlx_vlm/models/unlimited_ocr/README.md)
+- [MLX-VLM Gemma 4 unified implementation](https://github.com/Blaizzy/mlx-vlm/tree/main/mlx_vlm/models/gemma4_unified)
+- [MLX Gemma 4 12B model card](https://huggingface.co/mlx-community/gemma-4-12B-it-qat-4bit)
 - [pypdfium2 documentation](https://pypdfium2.readthedocs.io/)

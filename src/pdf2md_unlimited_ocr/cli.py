@@ -12,7 +12,14 @@ from rich.console import Console
 from rich.progress import BarColumn, MofNCompleteColumn, Progress, TextColumn, TimeRemainingColumn
 
 from .converter import ConversionError, asset_path_for, convert_pdf, markdown_path_for
+from .image_understanding import DEFAULT_IMAGE_MODEL, ImageDescriber, release_model_memory
+from .markdown import ImageDescriptionCallback
 from .ocr import DEFAULT_MODEL, DEFAULT_PAGES_PER_BATCH, UnlimitedOcr
+
+
+def input_path(value: str) -> Path:
+    """Expand a leading home directory marker in an input path."""
+    return Path(value).expanduser()
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -21,7 +28,7 @@ def build_parser() -> argparse.ArgumentParser:
         prog="pdf2md-unlimited-ocr",
         description="Convert PDF files to Markdown with local Unlimited OCR on Apple Silicon.",
     )
-    parser.add_argument("pdfs", nargs="+", type=Path, metavar="PDF")
+    parser.add_argument("pdfs", nargs="+", type=input_path, metavar="PDF")
     parser.add_argument("--stdout", action="store_true", help="Print Markdown instead of writing a file.")
     parser.add_argument("--force", action="store_true", help="Replace an existing Markdown file.")
     parser.add_argument("--keep-images", action="store_true", help="Keep rendered page images.")
@@ -29,6 +36,16 @@ def build_parser() -> argparse.ArgumentParser:
         "--no-images",
         action="store_true",
         help="Do not extract detected photos, charts, figures, maps, and complex tables.",
+    )
+    parser.add_argument(
+        "--describe-images",
+        action="store_true",
+        help="Add local multimodal descriptions below extracted visuals.",
+    )
+    parser.add_argument(
+        "--image-model",
+        default=DEFAULT_IMAGE_MODEL,
+        help=f"Multimodal model used by --describe-images. Default: {DEFAULT_IMAGE_MODEL}.",
     )
     parser.add_argument("--dpi", type=int, default=300, help="PDF render resolution. Default: 300.")
     parser.add_argument("--model", default=DEFAULT_MODEL, help=f"Hugging Face model. Default: {DEFAULT_MODEL}.")
@@ -52,6 +69,10 @@ def _validate_inputs(args: argparse.Namespace, parser: argparse.ArgumentParser) 
         parser.error("--dpi must be a positive integer")
     if args.pages_per_batch <= 0:
         parser.error("--pages-per-batch must be a positive integer")
+    if args.describe_images and args.no_images:
+        parser.error("--describe-images cannot be combined with --no-images")
+    if args.describe_images and args.stdout:
+        parser.error("--describe-images cannot be combined with --stdout")
 
     for pdf_path in pdf_paths:
         if not pdf_path.exists():
@@ -74,11 +95,35 @@ def run(argv: Sequence[str] | None = None) -> int:
     pdf_paths = _validate_inputs(args, parser)
 
     try:
-        if not args.quiet:
-            print(f"Loading {args.model}", file=sys.stderr)
-        ocr = UnlimitedOcr.load(args.model, pages_per_batch=args.pages_per_batch)
+        shared_ocr = None
+        if not args.describe_images:
+            if not args.quiet:
+                print(f"Loading {args.model}", file=sys.stderr)
+            shared_ocr = UnlimitedOcr.load(args.model, pages_per_batch=args.pages_per_batch)
 
         for pdf_path in pdf_paths:
+            description_loader = None
+            ocr = shared_ocr
+            ocr_holder: list[UnlimitedOcr] = []
+            if args.describe_images:
+                if not args.quiet:
+                    print(f"Loading {args.model}", file=sys.stderr)
+                ocr_holder.append(UnlimitedOcr.load(args.model, pages_per_batch=args.pages_per_batch))
+                ocr = ocr_holder[0]
+
+                def load_image_describer() -> ImageDescriptionCallback:
+                    """Release OCR before loading the larger image model."""
+                    ocr_holder[0].release()
+                    ocr_holder.clear()
+                    release_model_memory()
+                    if not args.quiet:
+                        print(f"Loading {args.image_model} for image understanding", file=sys.stderr)
+                    return ImageDescriber.load(args.image_model).describe
+
+                description_loader = load_image_describer
+
+            if ocr is None:
+                raise RuntimeError("OCR model was not loaded")
             task_id = None
             with Progress(
                 TextColumn("{task.description}"),
@@ -103,8 +148,14 @@ def run(argv: Sequence[str] | None = None) -> int:
                     dpi=args.dpi,
                     keep_images=args.keep_images,
                     asset_directory=None if args.stdout or args.no_images else asset_path_for(pdf_path),
+                    description_loader=description_loader,
                     progress=update_progress,
                 )
+            if args.describe_images:
+                if ocr_holder:
+                    ocr_holder[0].release()
+                    ocr_holder.clear()
+                release_model_memory()
             if result.image_directory is not None:
                 print(f"Kept page images in {result.image_directory}", file=sys.stderr)
             if result.asset_directory is not None and not args.quiet:
