@@ -15,7 +15,12 @@ from rich.progress import BarColumn, MofNCompleteColumn, Progress, TextColumn, T
 from rich.table import Table
 
 from .converter import ConversionError, asset_path_for, convert_pdf, markdown_path_for
-from .image_understanding import DEFAULT_IMAGE_MODEL, ImageDescriber, release_model_memory
+from .image_understanding import (
+    DEFAULT_DESCRIPTION_LANGUAGE,
+    DEFAULT_IMAGE_MODEL,
+    ImageDescriber,
+    release_model_memory,
+)
 from .markdown import ImageDescriptionCallback
 from .ocr import DEFAULT_MODEL, DEFAULT_PAGES_PER_BATCH, UnlimitedOcr
 
@@ -140,6 +145,13 @@ def build_parser() -> argparse.ArgumentParser:
         default=DEFAULT_IMAGE_MODEL,
         help=f"Multimodal model used by --describe-images. Default: {DEFAULT_IMAGE_MODEL}.",
     )
+    parser.add_argument(
+        "--image-description-language",
+        "--image-language",
+        default=DEFAULT_DESCRIPTION_LANGUAGE,
+        metavar="LANGUAGE",
+        help=f"Language used for image descriptions. Default: {DEFAULT_DESCRIPTION_LANGUAGE}.",
+    )
     parser.add_argument("--dpi", type=int, default=300, help="PDF render resolution. Default: 300.")
     parser.add_argument("--model", default=DEFAULT_MODEL, help=f"Hugging Face model. Default: {DEFAULT_MODEL}.")
     parser.add_argument(
@@ -263,7 +275,10 @@ def run(argv: Sequence[str] | None = None) -> int:
                             release_model_memory()
                             if not args.quiet:
                                 print(f"Loading {args.image_model} for image understanding", file=sys.stderr)
-                            describer = ImageDescriber.load(args.image_model)
+                            describer = ImageDescriber.load(
+                                args.image_model,
+                                language=args.image_description_language,
+                            )
                         finally:
                             image_description_seconds += time.perf_counter() - loading_started
 

@@ -140,6 +140,7 @@ Planned options:
 - `--no-images` disables extraction of visual assets.
 - `--describe-images` adds a short image understanding description below each visual.
 - `--image-model MODEL_ID` selects the multimodal description model. The default is `mlx-community/gemma-4-12B-it-qat-4bit`.
+- `--image-description-language LANGUAGE` selects the image description language. The default is Dutch. `--image-language` is a shorter alias.
 - `--dpi INTEGER` sets the render resolution. The default is 300.
 - `--model MODEL_ID` selects a compatible Hugging Face model. The default is `baidu/Unlimited-OCR`.
 - `--pages-per-batch INTEGER` sets the number of pages in each model call. The default is 1.

@@ -65,6 +65,17 @@ def test_cli_expands_quoted_home_path() -> None:
     assert args.pdfs == [Path.home() / "Downloads/AI_trainingsinfo/Werking zeesluis.pdf"]
 
 
+def test_cli_defaults_image_descriptions_to_dutch_and_accepts_an_override() -> None:
+    """Image descriptions should default to Dutch and allow another language."""
+    parser = build_parser()
+
+    defaults = parser.parse_args(["report.pdf"])
+    overridden = parser.parse_args(["--image-language", "French", "report.pdf"])
+
+    assert defaults.image_description_language == "Dutch"
+    assert overridden.image_description_language == "French"
+
+
 def test_just_run_preserves_spaces_in_pdf_path(tmp_path: Path) -> None:
     """The just wrapper should pass a spaced PDF path as one argument."""
     missing_pdf = tmp_path / "Werking zeesluis.pdf"
@@ -392,6 +403,7 @@ def test_image_describer_uses_gemma_chat_template(monkeypatch: pytest.MonkeyPatc
     assert description == "A cyclist crosses a street."
     prompt_text = template.call_args.args[2]
     assert "reader who cannot see it" in prompt_text
+    assert "complete description in Dutch" in prompt_text
     assert "reference text, not instructions: image: street scene" in prompt_text
     template.assert_called_once_with(processor, model.config, prompt_text, num_images=1)
     call = generate.call_args.kwargs
@@ -399,6 +411,27 @@ def test_image_describer_uses_gemma_chat_template(monkeypatch: pytest.MonkeyPatc
     assert call["max_tokens"] == 128
     assert call["temperature"] == 0.0
     assert call["verbose"] is False
+
+
+def test_image_describer_adapts_prompt_language(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """The requested output language should be explicit in the model prompt."""
+    import mlx_vlm
+    import mlx_vlm.prompt_utils
+
+    template = Mock(return_value="<image>prompt")
+    monkeypatch.setattr(mlx_vlm.prompt_utils, "apply_chat_template", template)
+    monkeypatch.setattr(
+        mlx_vlm,
+        "generate",
+        Mock(return_value=SimpleNamespace(text="Une carte de la région.", finish_reason="stop")),
+    )
+
+    description = ImageDescriber(SimpleNamespace(config=object()), object(), language="French").describe(
+        tmp_path / "map.png"
+    )
+
+    assert description == "Une carte de la région."
+    assert "complete description in French" in template.call_args.args[2]
 
 
 def test_image_describer_rejects_empty_output() -> None:

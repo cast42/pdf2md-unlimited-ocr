@@ -53,7 +53,9 @@ just run --describe-images "~/Downloads/AI_trainingsinfo/Werking zeesluis.pdf"
 Image understanding uses `mlx-community/gemma-4-12B-it-qat-4bit` by default. The
 model runs locally through MLX VLM. Each description appears below its image as
 `**Image understanding:**`. Use `--image-model` to select another compatible
-multimodal model.
+multimodal model. Descriptions are written in Dutch by default. Use
+`--image-description-language English` or the shorter `--image-language English`
+to request another language.
 
 The tool finishes OCR and releases the OCR model before loading Gemma 4. The two
 models are not kept in memory together. Gemma 4 is not loaded when OCR finds no
