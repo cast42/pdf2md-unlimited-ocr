@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import shutil
 import tempfile
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
@@ -15,7 +16,12 @@ from .renderer import render_pdf
 class OcrBackend(Protocol):
     """Interface used by the PDF conversion pipeline."""
 
-    def parse(self, image_paths: list[Path]) -> str:
+    def parse(
+        self,
+        image_paths: list[Path],
+        *,
+        progress: Callable[[int, int], None] | None = None,
+    ) -> str:
         """Return text for ordered page images."""
         ...
 
@@ -48,12 +54,13 @@ def convert_pdf(
     *,
     dpi: int = 300,
     keep_images: bool = False,
+    progress: Callable[[int, int], None] | None = None,
 ) -> ConversionResult:
     """Render a PDF, run OCR, clean the Markdown, and remove page images."""
     image_directory = Path(tempfile.mkdtemp(prefix=f"pdf2md-{pdf_path.stem}-"))
     try:
         image_paths = render_pdf(pdf_path, image_directory, dpi=dpi)
-        markdown = clean_markdown(ocr.parse(image_paths))
+        markdown = clean_markdown(ocr.parse(image_paths, progress=progress))
         return ConversionResult(
             markdown=markdown,
             image_directory=image_directory if keep_images else None,

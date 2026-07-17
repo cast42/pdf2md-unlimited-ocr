@@ -70,6 +70,9 @@ For each PDF, the tool:
 
 The `--keep-images` option keeps the temporary directory and prints its path to standard error.
 
+The command shows a Rich progress bar with the number of completed pages and the estimated time remaining. Use
+`--quiet` to hide it. Progress is written to standard error, so `--stdout` still emits only Markdown on standard output.
+
 The model stays loaded while the tool processes every page. One page is sent per model call by default. Every batch uses the documented PDF settings. The prompt is `Multi page parsing.`, and the model uses base image mode with a 1,024 pixel image size. Generation uses a temperature of 0.0 and an output limit of 32,768 tokens. The tool inserts page breaks itself. It applies the optional 35 token repetition guard with a 1,024 token window and rejects output that reaches the token limit. Use `--pages-per-batch` to change the batch size when you need to test multi-page inference.
 
 ## Test

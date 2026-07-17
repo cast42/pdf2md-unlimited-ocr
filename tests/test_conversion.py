@@ -55,8 +55,9 @@ class EchoOcr:
         """Create an empty list of observed image paths."""
         self.image_paths: list[Path] = []
 
-    def parse(self, image_paths: list[Path]) -> str:
+    def parse(self, image_paths: list[Path], *, progress: object = None) -> str:
         """Record rendered paths and return fixed model output."""
+        del progress
         self.image_paths = image_paths
         assert all(path.exists() for path in image_paths)
         return "<|det|>title [0, 0, 100, 100]<|/det|># Test\n<PAGE>\nDone"
@@ -141,6 +142,17 @@ def test_ocr_splits_long_documents_into_page_batches() -> None:
     assert [len(batch) for batch in ocr.batches] == [4, 4, 2]
     assert [path for batch in ocr.batches for path in batch] == image_paths
     assert output.count("<PAGE>") == 2
+
+
+def test_ocr_reports_completed_pages_after_each_batch() -> None:
+    """Page progress should start at zero and advance by completed batches."""
+    image_paths = [Path(f"page_{number:04d}.png") for number in range(1, 6)]
+    ocr = RecordingUnlimitedOcr(pages_per_batch=2)
+    updates: list[tuple[int, int]] = []
+
+    ocr.parse(image_paths, progress=lambda completed, total: updates.append((completed, total)))
+
+    assert updates == [(0, 5), (2, 5), (4, 5), (5, 5)]
 
 
 def test_pdf_ocr_uses_documented_unlimited_ocr_settings(monkeypatch: pytest.MonkeyPatch) -> None:

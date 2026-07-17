@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -11,6 +12,7 @@ from .repetition import SlidingWindowNoRepeatNgramProcessor
 DEFAULT_MODEL = "baidu/Unlimited-OCR"
 DEFAULT_PAGES_PER_BATCH = 1
 _REPEATED_EMPTY_CELLS = "<td></td>" * 50
+PageProgressCallback = Callable[[int, int], None]
 
 
 class OcrError(RuntimeError):
@@ -57,15 +59,27 @@ class UnlimitedOcr:
             raise OcrError(f"Could not load model {model_id}: {error}") from error
         return cls(model, processor, pages_per_batch=pages_per_batch)
 
-    def parse(self, image_paths: list[Path]) -> str:
+    def parse(
+        self,
+        image_paths: list[Path],
+        *,
+        progress: PageProgressCallback | None = None,
+    ) -> str:
         """Parse ordered PDF page images and return the model text."""
         if not image_paths:
             raise OcrError("No page images were provided to the OCR model")
+
+        completed = 0
+        if progress is not None:
+            progress(completed, len(image_paths))
 
         outputs = []
         for start in range(0, len(image_paths), self.pages_per_batch):
             batch = image_paths[start : start + self.pages_per_batch]
             outputs.append(self._parse_batch(batch))
+            completed += len(batch)
+            if progress is not None:
+                progress(completed, len(image_paths))
         return "\n<PAGE>\n".join(outputs)
 
     def _parse_batch(self, image_paths: list[Path]) -> str:

@@ -8,6 +8,9 @@ from collections.abc import Sequence
 from importlib.metadata import version
 from pathlib import Path
 
+from rich.console import Console
+from rich.progress import BarColumn, MofNCompleteColumn, Progress, TextColumn, TimeRemainingColumn
+
 from .converter import ConversionError, convert_pdf, markdown_path_for
 from .ocr import DEFAULT_MODEL, DEFAULT_PAGES_PER_BATCH, UnlimitedOcr
 
@@ -69,9 +72,31 @@ def run(argv: Sequence[str] | None = None) -> int:
         ocr = UnlimitedOcr.load(args.model, pages_per_batch=args.pages_per_batch)
 
         for pdf_path in pdf_paths:
-            if not args.quiet:
-                print(f"Converting {pdf_path}", file=sys.stderr)
-            result = convert_pdf(pdf_path, ocr, dpi=args.dpi, keep_images=args.keep_images)
+            task_id = None
+            with Progress(
+                TextColumn("{task.description}"),
+                BarColumn(),
+                MofNCompleteColumn(),
+                TextColumn("pages"),
+                TimeRemainingColumn(),
+                console=Console(stderr=True),
+                disable=args.quiet,
+            ) as page_progress:
+
+                def update_progress(completed: int, total: int) -> None:
+                    """Create and update this PDF's page progress task."""
+                    nonlocal task_id
+                    if task_id is None:
+                        task_id = page_progress.add_task(pdf_path.name, total=total)
+                    page_progress.update(task_id, completed=completed, total=total)
+
+                result = convert_pdf(
+                    pdf_path,
+                    ocr,
+                    dpi=args.dpi,
+                    keep_images=args.keep_images,
+                    progress=update_progress,
+                )
             if result.image_directory is not None:
                 print(f"Kept page images in {result.image_directory}", file=sys.stderr)
             if args.stdout:
