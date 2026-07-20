@@ -1,48 +1,22 @@
-# Agent Handbook
+# Project instructions
 
-Guidelines for automation agents working inside repositories created from this template.
+## Project
 
-## Getting Started Inside a Clone
+- The project converts PDFs to Markdown with Baidu Unlimited OCR and MLX VLM.
+- Full model runs require an Apple Silicon Mac with Metal access.
+- Use `uv` for Python environments and dependencies. Use the `justfile` for project commands.
 
-- Confirm `uv` is available: <https://docs.astral.sh/uv/getting-started/installation/>.
-- Synchronize the environment before running code: `just install` (runs `uv sync --dev` and installs pre-commit hooks).
-- When bootstrapping a fresh variant that needs a newer interpreter, re-run `uv init --python <version>` at the project root before syncing.
+## Required rules
 
-## Managing Dependencies
+- Use the `pdf2md-development` skill for code, dependency, test, and documentation changes.
+- Render PDFs with `pypdfium2`. Do not add PyMuPDF or import `fitz`.
+- Keep type hints and concise docstrings in maintained Python code.
+- Prefer built-in collection types such as `list` and `dict` over old `typing` aliases.
+- Treat Ruff, Ruff format, Ty, pytest, and repository hygiene warnings as failures.
+- Preserve unrelated user changes in the working tree.
 
-- Add runtime packages with `uv add <package>`.
-- Add tooling with the `--dev` flag, e.g. `uv add --dev ruff ty pytest zensical`.
-- After editing dependencies, commit the updated `pyproject.toml` and `uv.lock`, then run `just check` and `just test`.
+## Completion
 
-## Project Commands
-
-Use the `justfile` to keep task automation consistent. Key recipes:
-
-- `just install`: Syncs dev dependencies and installs pre-commit hooks (`uv sync --dev`, `uv run pre-commit install`).
-- `just check`: Runs all pre-commit hooks against every file (Ruff, Ruff format, Ty, and hygiene hooks). Run before opening a PR or after dependency changes.
-- `just lint`, `just typing`: Individual quality gates when you need faster feedback.
-- `just test`: Executes `pytest` via `uv run -m pytest -q`.
-- `just docs`: Builds documentation with zensical (`uv run zensical build`); useful after updating docstrings.
-- `just run`: Launches the application entry point (`uv run python -m src.main`).
-- `just clean`: Clears caches (`.venv`, `.uv-cache`, `__pycache__`, etc.) when the environment misbehaves.
-- `just update`: Runs `uv lock --upgrade` to refresh dependency versions in `uv.lock`; follow with `just install` when you need to update the virtualenv.
-
-All recipes inherit `.env` values because the `justfile` uses `set dotenv-load`.
-
-## Code Quality Expectations
-
-- Maintain type hints and concise docstrings so zensical documentation stays up to date.
-- Prefer built-in collection types (`list`, `dict`, `set`, etc.) over legacy `typing` aliases.
-- Treat Ruff, Ty, and pytest warnings as failures; resolve them before finalizing work.
-
-## Runtime Notes
-
-- The application runs Baidu Unlimited OCR locally through MLX-VLM.
-- Full integration tests need an Apple Silicon Mac with Metal access and a locally cached model, or network access for the first model download.
-- PDF rendering must use `pypdfium2`. Do not add PyMuPDF or import `fitz`.
-
-## When Collaborating
-
-- Include a short summary of commands executed and results in status updates.
-- Surface tooling limitations or manual steps you could not automate.
-- Align doc updates with code changes so `just docs` continues to produce accurate reference pages.
+- Run checks and tests that match the change.
+- Update documentation when behavior or commands change.
+- Report the commands run, their results, and any checks that could not be completed.

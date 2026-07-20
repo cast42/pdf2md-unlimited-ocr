@@ -1,0 +1,4 @@
+interface:
+  display_name: "PDF2MD development"
+  short_description: "Develop and validate the local PDF converter"
+  default_prompt: "Use $pdf2md-development to implement and validate a repository change."
